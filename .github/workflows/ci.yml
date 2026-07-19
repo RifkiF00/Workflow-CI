@@ -1,0 +1,69 @@
+name: Model Training and CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  ci-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python 3.12.7
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12.7'
+
+      - name: Check Env
+        run: |
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install mlflow==2.19.0 pandas scikit-learn matplotlib seaborn dagshub
+
+      - name: Run mlflow project
+        run: |
+          # Menjalankan MLProject yang berada di subfolder MLProject
+          mlflow run MLProject --no-conda
+
+      - name: Get latest MLflow run_id
+        id: get_run_id
+        run: |
+          # Mengambil run_id dari model default yang baru saja selesai dilatih
+          RUN_ID=$(python -c "import mlflow; client = mlflow.tracking.MlflowClient(); runs = client.search_runs(experiment_ids=['0']); print(runs[0].info.run_id if runs else '')")
+          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
+          echo "Run ID ditemukan: $RUN_ID"
+
+      - name: Upload to GitHub Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: trained-model
+          path: mlruns/0/${{ env.RUN_ID }}/artifacts/model/
+
+      - name: Build Docker Model
+        run: |
+          # Membangun docker image dari model MLflow
+          mlflow models build-docker -m "runs:/${{ env.RUN_ID }}/model" -n "rifkif00/workflow-ci:latest" --enable-mlserver
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+
+      - name: Tag Docker Image
+        run: |
+          docker tag rifkif00/workflow-ci:latest ${{ secrets.DOCKER_HUB_USERNAME }}/workflow-ci:latest
+
+      - name: Push Docker Image
+        run: |
+          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/workflow-ci:latest
