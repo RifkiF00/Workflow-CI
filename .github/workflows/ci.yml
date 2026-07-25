@@ -7,30 +7,27 @@ on:
       - master
   workflow_dispatch:
 
-env:
-  MLFLOW_TRACKING_URI: "file:./mlruns"
-
 jobs:
   ci-pipeline:
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Set up Python 3.12.7
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12.7'
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+          python-version: "3.12.7"
 
       - name: Check Env
         run: |
           python --version
           pip --version
-          docker --version
 
       - name: Install dependencies
         run: |
@@ -41,12 +38,12 @@ jobs:
         run: |
           mlflow run MLProject --env-manager=local
 
-      - name: Locate and verify model artifact
-        id: find_model
+      - name: Get latest MLflow run_id and model path
+        id: get_run_id
         run: |
-          MODEL_PATH=$(python -c "import glob, os; paths = sorted(glob.glob('**/artifacts/model', recursive=True), key=os.path.getmtime, reverse=True); print(paths[0] if paths else '')")
+          MODEL_PATH=$(find . -type d -path "*/artifacts/model" 2>/dev/null | head -n 1)
           echo "MODEL_PATH=$MODEL_PATH" >> $GITHUB_ENV
-          echo "Found model path: $MODEL_PATH"
+          echo "Found MODEL_PATH: $MODEL_PATH"
           ls -la "$MODEL_PATH"
 
       - name: Upload to GitHub Artifacts
@@ -57,24 +54,37 @@ jobs:
 
       - name: Build Docker Model
         run: |
-          mlflow models build-docker -m "${{ env.MODEL_PATH }}" -n "rifkif00/workflow-ci:latest" --env-manager=local
+          find /opt/hostedtoolcache/Python \
+            -name docker_utils.py \
+            -exec sed -i \
+            's|https://bootstrap.pypa.io/get-pip.py|https://bootstrap.pypa.io/pip/3.9/get-pip.py|g' \
+            {} + || true
+
+          mlflow models build-docker \
+            -m "${{ env.MODEL_PATH }}" \
+            -n "rifkif00/workflow-ci:latest"
 
       - name: Log in to Docker Hub
         continue-on-error: true
-        if: "${{ secrets.DOCKER_HUB_USERNAME != '' }}"
-        uses: docker/login-action@v2
+        uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+          username: ${{ secrets.DOCKER_HUB_USERNAME || secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN || secrets.DOCKER_PASSWORD }}
 
       - name: Tag Docker Image
         continue-on-error: true
-        if: "${{ secrets.DOCKER_HUB_USERNAME != '' }}"
         run: |
-          docker tag rifkif00/workflow-ci:latest ${{ secrets.DOCKER_HUB_USERNAME }}/workflow-ci:latest
+          DOCKER_USER="${{ secrets.DOCKER_HUB_USERNAME || secrets.DOCKER_USERNAME }}"
+          if [ -n "$DOCKER_USER" ]; then
+            docker tag rifkif00/workflow-ci:latest "$DOCKER_USER/workflow-ci:latest"
+            docker tag rifkif00/workflow-ci:latest "$DOCKER_USER/workflow-ci:v1.0"
+          fi
 
       - name: Push Docker Image
         continue-on-error: true
-        if: "${{ secrets.DOCKER_HUB_USERNAME != '' }}"
         run: |
-          docker push ${{ secrets.DOCKER_HUB_USERNAME }}/workflow-ci:latest
+          DOCKER_USER="${{ secrets.DOCKER_HUB_USERNAME || secrets.DOCKER_USERNAME }}"
+          if [ -n "$DOCKER_USER" ]; then
+            docker push "$DOCKER_USER/workflow-ci:latest"
+            docker push "$DOCKER_USER/workflow-ci:v1.0"
+          fi
