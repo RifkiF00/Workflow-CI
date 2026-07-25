@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 import mlflow
 import mlflow.sklearn
-import dagshub
 import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LinearRegression
@@ -13,20 +12,6 @@ from sklearn.metrics import (
     mean_absolute_percentage_error,
     r2_score
 )
-
-# ==========================================
-# DagsHub Initialization
-# ==========================================
-
-try:
-    dagshub.init(
-        repo_owner="RifkiF00",
-        repo_name="Eksperimen_SML_RifkiFirmansyah",
-        mlflow=True
-    )
-    print("DagsHub initialized successfully for RifkiF00")
-except Exception as e:
-    print(f"Dagshub init error: {e}")
 
 # ==========================================
 # MLflow AUTOLOG
@@ -52,35 +37,22 @@ y_test = pd.read_csv(
 ).values.ravel()
 
 # ==========================================
-# MLflow Run
+# Training Function
 # ==========================================
 
-with mlflow.start_run(run_name="LinearRegression_ManualLogging"):
-
+def train_and_log():
     print("Memulai pelatihan model...")
-
-    # ======================================
-    # Training
-    # ======================================
 
     lr_model = LinearRegression()
     lr_model.fit(X_train, y_train)
 
     y_pred = lr_model.predict(X_test)
 
-    # ======================================
-    # Evaluation
-    # ======================================
-
     mse = mean_squared_error(y_test, y_pred)
     rmse = np.sqrt(mse)
     mae = mean_absolute_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred)
     mape = mean_absolute_percentage_error(y_test, y_pred)
-
-    # ======================================
-    # Manual Logging
-    # ======================================
 
     mlflow.log_param("model_type", "LinearRegression")
 
@@ -90,72 +62,10 @@ with mlflow.start_run(run_name="LinearRegression_ManualLogging"):
     mlflow.log_metric("custom_r2", r2)
     mlflow.log_metric("custom_mape", mape)
 
-    # ======================================
-    # Save Model
-    # ======================================
-
-    input_contoh = X_train.head(5)
-
     mlflow.sklearn.log_model(
         sk_model=lr_model,
-        artifact_path="model",
-        input_example=input_contoh
+        artifact_path="model"
     )
-
-    # ======================================
-    # Artifact 1
-    # ======================================
-
-    plt.figure(figsize=(8, 6))
-    plt.scatter(y_test, y_pred)
-    plt.xlabel("Actual Values")
-    plt.ylabel("Predicted Values")
-    plt.title("Actual vs Predicted")
-
-    actual_pred_plot = "actual_vs_predicted.png"
-    plt.savefig(actual_pred_plot)
-    plt.close()
-
-    mlflow.log_artifact(actual_pred_plot)
-
-    # ======================================
-    # Artifact 2
-    # ======================================
-
-    residuals = y_test - y_pred
-
-    plt.figure(figsize=(8, 6))
-    plt.scatter(y_pred, residuals)
-    plt.axhline(y=0)
-    plt.xlabel("Predicted Values")
-    plt.ylabel("Residuals")
-    plt.title("Residual Plot")
-
-    residual_plot = "residual_plot.png"
-    plt.savefig(residual_plot)
-    plt.close()
-
-    mlflow.log_artifact(residual_plot)
-
-    # ======================================
-    # Artifact 3
-    # ======================================
-
-    report_file = "evaluation_report.txt"
-
-    with open(report_file, "w") as f:
-        f.write("=== MODEL EVALUATION REPORT ===\n\n")
-        f.write(f"MSE  : {mse}\n")
-        f.write(f"RMSE : {rmse}\n")
-        f.write(f"MAE  : {mae}\n")
-        f.write(f"R2   : {r2}\n")
-        f.write(f"MAPE : {mape}\n")
-
-    mlflow.log_artifact(report_file)
-
-    # ======================================
-    # Console Output
-    # ======================================
 
     print("\nPelatihan selesai!")
     print(f"MSE  : {mse:.4f}")
@@ -164,4 +74,13 @@ with mlflow.start_run(run_name="LinearRegression_ManualLogging"):
     print(f"R²   : {r2:.4f}")
     print(f"MAPE : {mape:.4f} ({mape*100:.2f}%)")
 
-print("Run ended successfully")
+# ==========================================
+# Execution Control
+# ==========================================
+
+if "MLFLOW_RUN_ID" in os.environ or mlflow.active_run() is not None:
+    train_and_log()
+else:
+    mlflow.set_experiment("Student_Performance_Basic_Model")
+    with mlflow.start_run(run_name="LinearRegression_ManualLogging"):
+        train_and_log()
