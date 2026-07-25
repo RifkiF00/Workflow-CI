@@ -41,29 +41,23 @@ jobs:
         run: |
           mlflow run MLProject --env-manager=local
 
-      - name: Get latest MLflow run_id with model artifact
-        id: get_run_id
+      - name: Locate and verify model artifact
+        id: find_model
         run: |
-          RUN_INFO=$(python -c "import mlflow; client = mlflow.tracking.MlflowClient('file:./mlruns'); exps = client.search_experiments(); exp_ids = [e.experiment_id for e in exps]; runs = client.search_runs(experiment_ids=exp_ids, order_by=['attribute.start_time DESC']); target_run = next((r for r in runs if any(a.path == 'model' for a in client.list_artifacts(r.info.run_id))), runs[0]); print(f'{target_run.info.experiment_id},{target_run.info.run_id}')")
-          EXP_ID=$(echo $RUN_INFO | cut -d',' -f1)
-          RUN_ID=$(echo $RUN_INFO | cut -d',' -f2)
-          echo "RUN_ID=$RUN_ID" >> $GITHUB_ENV
-          echo "EXP_ID=$EXP_ID" >> $GITHUB_ENV
-          echo "Run ID ditemukan: $RUN_ID (Exp ID: $EXP_ID)"
-
-      - name: Verify model artifact
-        run: |
-          ls -la mlruns/${{ env.EXP_ID }}/${{ env.RUN_ID }}/artifacts/model/
+          MODEL_PATH=$(python -c "import glob, os; paths = sorted(glob.glob('**/artifacts/model', recursive=True), key=os.path.getmtime, reverse=True); print(paths[0] if paths else '')")
+          echo "MODEL_PATH=$MODEL_PATH" >> $GITHUB_ENV
+          echo "Found model path: $MODEL_PATH"
+          ls -la "$MODEL_PATH"
 
       - name: Upload to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: trained-model
-          path: mlruns/${{ env.EXP_ID }}/${{ env.RUN_ID }}/artifacts/model/
+          path: ${{ env.MODEL_PATH }}
 
       - name: Build Docker Model
         run: |
-          mlflow models build-docker -m "runs:/${{ env.RUN_ID }}/model" -n "rifkif00/workflow-ci:latest" --env-manager=local
+          mlflow models build-docker -m "${{ env.MODEL_PATH }}" -n "rifkif00/workflow-ci:latest" --env-manager=local
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
