@@ -35,15 +35,18 @@ jobs:
           pip install mlflow==2.19.0 pandas scikit-learn matplotlib seaborn
 
       - name: Run mlflow project
-        env:
-          MLFLOW_TRACKING_URI: "file:./mlruns"
         run: |
           mlflow run MLProject --env-manager=local
 
       - name: Get latest MLflow run_id and model path
         id: get_run_id
         run: |
-          MODEL_PATH=$(find . -type d -path "*/artifacts/model" 2>/dev/null | head -n 1)
+          MLMODEL_FILE=$(find . -name "MLmodel" 2>/dev/null | head -n 1)
+          if [ -n "$MLMODEL_FILE" ]; then
+            MODEL_PATH=$(dirname "$MLMODEL_FILE")
+          else
+            MODEL_PATH=$(find . -type d -path "*/artifacts/model" 2>/dev/null | head -n 1)
+          fi
           echo "MODEL_PATH=$MODEL_PATH" >> $GITHUB_ENV
           echo "Found MODEL_PATH: $MODEL_PATH"
           ls -la "$MODEL_PATH"
