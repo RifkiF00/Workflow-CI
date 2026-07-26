@@ -35,6 +35,8 @@ jobs:
           pip install mlflow==2.19.0 pandas scikit-learn matplotlib seaborn
 
       - name: Run mlflow project
+        env:
+          MLFLOW_TRACKING_URI: "file:./mlruns"
         run: |
           mlflow run MLProject --env-manager=local
 
