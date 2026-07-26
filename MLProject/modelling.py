@@ -1,4 +1,11 @@
 import os
+import sys
+import io
+
+# Force UTF-8 encoding for stdout on Windows
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 import numpy as np
 import pandas as pd
 import mlflow
