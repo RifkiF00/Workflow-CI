@@ -14,15 +14,19 @@ from sklearn.metrics import (
 )
 
 # ==========================================
+# Set MLflow Local Tracking URI (localhost)
+# ==========================================
+if "MLFLOW_TRACKING_URI" not in os.environ:
+    mlflow.set_tracking_uri("http://127.0.0.1:5000")
+
+# ==========================================
 # MLflow AUTOLOG
 # ==========================================
-
 mlflow.sklearn.autolog()
 
 # ==========================================
 # Load Dataset
 # ==========================================
-
 current_dir = os.path.dirname(os.path.abspath(__file__))
 dataset_dir = os.path.join(current_dir, "student_performance_preprocessing")
 
@@ -39,9 +43,8 @@ y_test = pd.read_csv(
 # ==========================================
 # Training Function
 # ==========================================
-
 def train_and_log():
-    print("Memulai pelatihan model...")
+    print("Memulai pelatihan model dasar (LinearRegression)...")
 
     lr_model = LinearRegression()
     lr_model.fit(X_train, y_train)
@@ -77,10 +80,7 @@ def train_and_log():
 # ==========================================
 # Execution Control
 # ==========================================
-
-if "MLFLOW_RUN_ID" in os.environ or mlflow.active_run() is not None:
-    train_and_log()
-else:
+if __name__ == "__main__":
     mlflow.set_experiment("Student_Performance_Basic_Model")
-    with mlflow.start_run(run_name="LinearRegression_ManualLogging"):
+    with mlflow.start_run(run_name="LinearRegression_Basic_Model"):
         train_and_log()
